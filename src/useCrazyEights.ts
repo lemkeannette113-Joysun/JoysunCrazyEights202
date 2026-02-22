@@ -1,5 +1,51 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CardData, Suit, Rank, GameStatus, Turn, SUITS, RANKS } from './types';
+import { CardData, Suit, Rank, GameStatus, Turn, Language, SUITS, RANKS } from './types';
+import { soundService } from './soundService';
+
+const TRANSLATIONS = {
+  zh: {
+    welcome: '欢迎来到疯狂 8 点！',
+    yourTurn: '轮到你了！匹配花色或点数。',
+    invalidMove: '无效的出牌！请匹配花色、点数，或者打出 8。',
+    crazyEight: '疯狂 8 点！请选择一个新的花色。',
+    aiPlayedEight: (suit: string) => `AI 打出了 8 并选择了 ${suit}！`,
+    aiThinking: 'AI 正在思考...',
+    playerTurn: '轮到你了！',
+    deckEmpty: '牌堆已空！跳过此回合。',
+    playerDrew: '你摸了一张牌。',
+    aiDrew: 'AI 摸了一张牌。',
+    playerChose: (suit: string) => `你选择了 ${suit}。AI 正在思考...`,
+    playerWin: '恭喜！你赢了！',
+    aiWin: 'AI 获胜！下次好运。',
+    suitNames: {
+      hearts: '红心',
+      diamonds: '方块',
+      clubs: '梅花',
+      spades: '黑桃'
+    }
+  },
+  en: {
+    welcome: 'Welcome to Crazy Eights!',
+    yourTurn: 'Your turn! Match the suit or rank.',
+    invalidMove: 'Invalid move! Match the suit or rank, or play an 8.',
+    crazyEight: 'Crazy 8! Choose a new suit.',
+    aiPlayedEight: (suit: string) => `AI played an 8 and chose ${suit}!`,
+    aiThinking: "AI's turn...",
+    playerTurn: "Your turn!",
+    deckEmpty: 'Deck is empty! Skipping turn.',
+    playerDrew: 'You drew a card.',
+    aiDrew: 'AI drew a card.',
+    playerChose: (suit: string) => `You chose ${suit}. AI's turn...`,
+    playerWin: 'Congratulations! You won!',
+    aiWin: 'AI wins! Better luck next time.',
+    suitNames: {
+      hearts: 'Hearts',
+      diamonds: 'Diamonds',
+      clubs: 'Clubs',
+      spades: 'Spades'
+    }
+  }
+};
 
 const createDeck = (): CardData[] => {
   const deck: CardData[] = [];
@@ -33,7 +79,10 @@ export const useCrazyEights = () => {
   const [turn, setTurn] = useState<Turn>('player');
   const [activeSuit, setActiveSuit] = useState<Suit | null>(null);
   const [winner, setWinner] = useState<Turn | null>(null);
-  const [message, setMessage] = useState<string>('Welcome to Crazy Eights!');
+  const [language, setLanguage] = useState<Language>('zh');
+  const [message, setMessage] = useState<string>(TRANSLATIONS.zh.welcome);
+
+  const t = TRANSLATIONS[language];
 
   const initGame = useCallback(() => {
     setStatus('dealing');
@@ -57,10 +106,16 @@ export const useCrazyEights = () => {
       setStatus('playing');
       setTurn('player');
       setWinner(null);
-      setMessage('Your turn! Match the suit or rank.');
+      setMessage(t.yourTurn);
     }, 500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [language, t.yourTurn]);
+
+  // Update message when language changes if in a specific state
+  useEffect(() => {
+    if (status === 'start-screen') setMessage(t.welcome);
+    else if (status === 'playing' && turn === 'player') setMessage(t.yourTurn);
+  }, [language, status, turn]);
 
   const topCard = discardPile[discardPile.length - 1];
 
@@ -75,7 +130,7 @@ export const useCrazyEights = () => {
     if (!isPlayer && turn !== 'ai') return;
 
     if (!isValidMove(card)) {
-      if (isPlayer) setMessage("Invalid move! Match the suit or rank, or play an 8.");
+      if (isPlayer) setMessage(t.invalidMove);
       return;
     }
 
@@ -90,9 +145,10 @@ export const useCrazyEights = () => {
     setDiscardPile((prev) => [...prev, card]);
     
     if (card.rank === '8') {
+      soundService.playExplosion();
       if (isPlayer) {
         setStatus('selecting-suit');
-        setMessage('Crazy 8! Choose a new suit.');
+        setMessage(t.crazyEight);
       } else {
         // AI logic for choosing suit: pick most frequent suit in hand
         const suitsInHand = aiHand.filter(c => c.id !== card.id).map(c => c.suit);
@@ -109,13 +165,14 @@ export const useCrazyEights = () => {
         });
         
         setActiveSuit(bestSuit);
-        setMessage(`AI played an 8 and chose ${bestSuit}!`);
+        setMessage(t.aiPlayedEight(t.suitNames[bestSuit]));
         setTurn('player');
       }
     } else {
+      soundService.playCard();
       setActiveSuit(card.suit);
       setTurn(isPlayer ? 'ai' : 'player');
-      setMessage(isPlayer ? "AI's turn..." : "Your turn!");
+      setMessage(isPlayer ? t.aiThinking : t.playerTurn);
     }
   };
 
@@ -125,7 +182,7 @@ export const useCrazyEights = () => {
     if (!isPlayer && turn !== 'ai') return;
 
     if (deck.length === 0) {
-      setMessage("Deck is empty! Skipping turn.");
+      setMessage(t.deckEmpty);
       setTurn(isPlayer ? 'ai' : 'player');
       return;
     }
@@ -133,16 +190,17 @@ export const useCrazyEights = () => {
     const newDeck = [...deck];
     const drawnCard = newDeck.pop()!;
     setDeck(newDeck);
+    soundService.playDraw();
 
     if (isPlayer) {
       setPlayerHand((prev) => [...prev, drawnCard]);
-      setMessage("You drew a card.");
+      setMessage(t.playerDrew);
       // Check if drawn card can be played immediately
       // In some variations you can play it, in others you can't. 
       // Let's allow playing it if valid.
     } else {
       setAiHand((prev) => [...prev, drawnCard]);
-      setMessage("AI drew a card.");
+      setMessage(t.aiDrew);
     }
     
     // After drawing, turn passes in most Crazy Eights rules if you still can't play.
@@ -155,7 +213,7 @@ export const useCrazyEights = () => {
     setActiveSuit(suit);
     setStatus('playing');
     setTurn('ai');
-    setMessage(`You chose ${suit}. AI's turn...`);
+    setMessage(t.playerChose(t.suitNames[suit]));
   };
 
   // AI Turn Logic
@@ -180,11 +238,11 @@ export const useCrazyEights = () => {
     if (playerHand.length === 0 && status === 'playing') {
       setWinner('player');
       setStatus('game-over');
-      setMessage('Congratulations! You won!');
+      setMessage(t.playerWin);
     } else if (aiHand.length === 0 && status === 'playing') {
       setWinner('ai');
       setStatus('game-over');
-      setMessage('AI wins! Better luck next time.');
+      setMessage(t.aiWin);
     }
   }, [playerHand, aiHand, status]);
 
@@ -198,6 +256,8 @@ export const useCrazyEights = () => {
     activeSuit,
     winner,
     message,
+    language,
+    setLanguage,
     playCard,
     drawCard,
     selectSuit,

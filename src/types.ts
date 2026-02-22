@@ -9,6 +9,7 @@ export interface CardData {
 
 export type GameStatus = 'start-screen' | 'dealing' | 'playing' | 'selecting-suit' | 'game-over';
 export type Turn = 'player' | 'ai';
+export type Language = 'zh' | 'en';
 
 export const SUITS: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
 export const RANKS: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
