@@ -8,7 +8,7 @@ export interface CardData {
 }
 
 export type GameStatus = 'start-screen' | 'dealing' | 'playing' | 'selecting-suit' | 'game-over';
-export type Turn = 'player' | 'ai';
+export type Turn = 'player' | 'ai' | 'draw';
 export type Language = 'zh' | 'en';
 
 export const SUITS: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];

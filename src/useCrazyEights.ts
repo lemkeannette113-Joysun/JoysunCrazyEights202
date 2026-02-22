@@ -17,6 +17,7 @@ const TRANSLATIONS = {
     playerChose: (suit: string) => `你选择了 ${suit}。AI 正在思考...`,
     playerWin: '恭喜！你赢了！',
     aiWin: 'AI 获胜！下次好运。',
+    draw: '平局！双方都无法出牌。',
     suitNames: {
       hearts: '红心',
       diamonds: '方块',
@@ -38,6 +39,7 @@ const TRANSLATIONS = {
     playerChose: (suit: string) => `You chose ${suit}. AI's turn...`,
     playerWin: 'Congratulations! You won!',
     aiWin: 'AI wins! Better luck next time.',
+    draw: "It's a draw! No more moves possible.",
     suitNames: {
       hearts: 'Hearts',
       diamonds: 'Diamonds',
@@ -182,6 +184,17 @@ export const useCrazyEights = () => {
     if (!isPlayer && turn !== 'ai') return;
 
     if (deck.length === 0) {
+      // Check if the other player can move
+      const otherHand = isPlayer ? aiHand : playerHand;
+      const otherCanMove = otherHand.some(isValidMove);
+      
+      if (!otherCanMove) {
+        setWinner('draw');
+        setStatus('game-over');
+        setMessage(t.draw);
+        return;
+      }
+
       setMessage(t.deckEmpty);
       setTurn(isPlayer ? 'ai' : 'player');
       return;
@@ -221,9 +234,31 @@ export const useCrazyEights = () => {
     if (status === 'playing' && turn === 'ai' && !winner) {
       const timer = setTimeout(() => {
         const playableCards = aiHand.filter(isValidMove);
+        
         if (playableCards.length > 0) {
-          // Play a card (prefer non-8s if possible, or just first one)
-          const cardToPlay = playableCards.find(c => c.rank !== '8') || playableCards[0];
+          const nonEights = playableCards.filter(c => c.rank !== '8');
+          const eights = playableCards.filter(c => c.rank === '8');
+
+          let cardToPlay: CardData;
+
+          if (nonEights.length > 0) {
+            // Strategy: Play the card whose suit we have the most of in hand
+            // This maximizes our chances of having a follow-up move.
+            const suitCounts: Record<string, number> = {};
+            aiHand.forEach(c => {
+              suitCounts[c.suit] = (suitCounts[c.suit] || 0) + 1;
+            });
+
+            cardToPlay = nonEights.reduce((best, current) => {
+              const bestCount = suitCounts[best.suit] || 0;
+              const currentCount = suitCounts[current.suit] || 0;
+              return currentCount > bestCount ? current : best;
+            }, nonEights[0]);
+          } else {
+            // No non-8s playable, use an 8 if we have one
+            cardToPlay = eights[0];
+          }
+
           playCard(cardToPlay, false);
         } else {
           drawCard(false);

@@ -6,7 +6,7 @@
 import { useCrazyEights } from './useCrazyEights';
 import { Hand } from './components/Hand';
 import { Card } from './components/Card';
-import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, Suit } from './types';
+import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, Suit, CardData } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 import { RefreshCw, Info, Trophy, AlertCircle, Languages, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -33,6 +33,8 @@ const UI_TRANSLATIONS = {
     victoryDesc: '你清空了手牌，战胜了 AI。',
     defeat: '失败',
     defeatDesc: 'AI 这次更快。别灰心！',
+    draw: '平局',
+    drawDesc: '双方都无法出牌，握手言和吧。',
     playAgain: '再玩一次',
     rulesTitle: '游戏规则',
     rules: [
@@ -69,6 +71,8 @@ const UI_TRANSLATIONS = {
     victoryDesc: "You've cleared your hand and outsmarted the AI.",
     defeat: 'DEFEAT',
     defeatDesc: "The AI was faster this time. Don't give up!",
+    draw: 'DRAW',
+    drawDesc: 'No more moves possible for both players.',
     playAgain: 'PLAY AGAIN',
     rulesTitle: 'Game Rules',
     rules: [
@@ -108,6 +112,7 @@ export default function App() {
   } = useCrazyEights();
 
   const [showRules, setShowRules] = useState(false);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   const ut = UI_TRANSLATIONS[language];
 
@@ -122,12 +127,33 @@ export default function App() {
     }
   }, [winner]);
 
+  // Reset selection when turn changes or hand changes
+  useEffect(() => {
+    setSelectedCardId(null);
+  }, [turn, playerHand.length]);
+
   const playableCardIds = new Set(
     playerHand.filter(c => {
       if (c.rank === '8') return true;
       return c.suit === activeSuit || c.rank === topCard?.rank;
     }).map(c => c.id)
   );
+
+  const handleCardClick = (card: CardData) => {
+    if (turn !== 'player') return;
+    if (playableCardIds.has(card.id)) {
+      setSelectedCardId(card.id === selectedCardId ? null : card.id);
+    }
+  };
+
+  const handlePlayClick = () => {
+    if (!selectedCardId) return;
+    const card = playerHand.find(c => c.id === selectedCardId);
+    if (card) {
+      playCard(card, true);
+      setSelectedCardId(null);
+    }
+  };
 
   return (
     <div className="fixed inset-0 felt-gradient flex flex-col font-sans select-none overflow-hidden">
@@ -177,17 +203,16 @@ export default function App() {
         {/* Center Area (Deck & Discard) */}
         <div className="flex-1 flex items-center justify-center gap-8 sm:gap-16">
           {/* Draw Pile */}
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-1 sm:gap-2">
             <div className="relative">
               {deck.length > 0 ? (
                 <Card 
                   isBack 
                   onClick={() => drawCard(true)} 
                   isPlayable={turn === 'player' && playableCardIds.size === 0}
-                  className="hover:rotate-1 transition-transform"
                 />
               ) : (
-                <div className="w-20 h-28 sm:w-24 sm:h-36 rounded-lg border-2 border-dashed border-white/20 flex items-center justify-center text-white/20">
+                <div className="w-16 h-24 sm:w-20 sm:h-28 md:w-24 md:h-36 rounded-lg border-2 border-dashed border-white/20 flex items-center justify-center text-white/20 text-xs">
                   Empty
                 </div>
               )}
@@ -209,7 +234,9 @@ export default function App() {
                   <Card 
                     key={topCard.id} 
                     card={topCard} 
+                    layoutId={topCard.id}
                     className="shadow-2xl"
+                    style={{ rotate: (discardPile.length % 10) - 5 }}
                   />
                 )}
               </AnimatePresence>
@@ -231,17 +258,34 @@ export default function App() {
           </div>
         </div>
 
-        {/* Player Hand */}
-        <div className="relative">
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 bg-yellow-500/20 rounded-full text-[10px] text-yellow-500 uppercase tracking-widest border border-yellow-500/30 z-10">
-            {ut.yourHand(playerHand.length)}
+        {/* Player Hand & Controls */}
+        <div className="relative flex flex-col items-center gap-4">
+          <AnimatePresence>
+            {selectedCardId && turn === 'player' && (
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                onClick={handlePlayClick}
+                className="px-8 py-2 bg-yellow-500 text-emerald-900 font-bold rounded-full shadow-lg hover:bg-yellow-400 transition-colors z-30"
+              >
+                {language === 'zh' ? '出牌' : 'PLAY'}
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          <div className="w-full relative">
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 bg-yellow-500/20 rounded-full text-[10px] text-yellow-500 uppercase tracking-widest border border-yellow-500/30 z-10">
+              {ut.yourHand(playerHand.length)}
+            </div>
+            <Hand 
+              cards={playerHand} 
+              isPlayer={true} 
+              onCardClick={handleCardClick}
+              playableCardIds={playableCardIds}
+              selectedCardId={selectedCardId}
+            />
           </div>
-          <Hand 
-            cards={playerHand} 
-            isPlayer={true} 
-            onCardClick={(card) => playCard(card, true)}
-            playableCardIds={playableCardIds}
-          />
         </div>
       </main>
 
@@ -392,13 +436,21 @@ export default function App() {
                   <h2 className="text-4xl font-black text-white mb-2 uppercase">{ut.victory}</h2>
                   <p className="text-zinc-400">{ut.victoryDesc}</p>
                 </div>
-              ) : (
+              ) : winner === 'ai' ? (
                 <div className="mb-6">
                   <div className="w-20 h-20 bg-zinc-700 rounded-full flex items-center justify-center text-zinc-400 mx-auto mb-4">
                     <AlertCircle size={40} />
                   </div>
                   <h2 className="text-4xl font-black text-white mb-2 uppercase">{ut.defeat}</h2>
                   <p className="text-zinc-400">{ut.defeatDesc}</p>
+                </div>
+              ) : (
+                <div className="mb-6">
+                  <div className="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center text-white mx-auto mb-4">
+                    <RefreshCw size={40} />
+                  </div>
+                  <h2 className="text-4xl font-black text-white mb-2 uppercase">{ut.draw}</h2>
+                  <p className="text-zinc-400">{ut.drawDesc}</p>
                 </div>
               )}
               
